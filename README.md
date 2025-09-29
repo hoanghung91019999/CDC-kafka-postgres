@@ -224,13 +224,21 @@ WorkingDirectory=/opt/kafka
 WantedBy=multi-user.target
 
 ```
-- cài debezium plugin
+- cài debezium plugin và JDBC
   + Debezium không phải là 1 service riêng, mà là bộ plugin (connector) chạy bên trong Kafka Connect.
   + Nó là “cầu nối” giúp Kafka Connect biết cách lấy dữ liệu từ database thông qua CDC (Change Data Capture).
   + Kafka Connect bản gốc chỉ là framework rỗng. Nếu không có plugin, nó không biết làm việc với PostgreSQL, MySQL, MongoDB, Oracle, ….
   + Với PostgreSQL → Debezium đọc WAL (Write Ahead Log) qua replication slot.
   + Với MySQL → Debezium đọc binlog
   + Chuyển đổi thay đổi (INSERT/UPDATE/DELETE) thành sự kiện JSON/Avro --> Đẩy sự kiện vào Kafka topic.
+- JDBC
+  + Cũng chạy trong Kafka Connect.
+
+  + Đọc message từ Kafka topic (qua broker 9092).
+
+  + Ghi vào database đích (qua port DB tương ứng: 3306, 5432, 1433…).
+
+  + Cấu hình và quản lý qua REST API của Connect (8083).
 ```
 mkdir -p /opt/debezium-plugins/debezium-connector-postgres
 cd /opt/debezium-plugins
