@@ -316,4 +316,7 @@ curl http://localhost:8083/connectors/source-db1/status
 curl http://localhost:8083/connectors/sink-db2/status
 ```
 **nếu tất cả cùng running là thành công**
+- ngoài ra có thể dùng mirrormaker để replica dữ liệu : 
+  + sẽ cần phải deploy 2 kafka ở cả DC và DR, sau đó dùng mirror marker để replica dữ liệu
+  + consumer ...
       
