@@ -160,4 +160,149 @@ CREATE PUBLICATION my_publication FOR TABLE my_table;
       + Biết partition nào mình làm leader/follower.
       + Zookeeper = quản lý & điều phối
       + Kafka = lưu trữ & truyền dữ liệu
+###### Cài kafka và zookerpeer phiên bản 3.8
+```
+wget https://downloads.apache.org/kafka/3.8.0/kafka_2.13-3.8.0.tgz
+tar -xvzf kafka_2.13-3.8.0.tgz -C /opt/
+ln -s /opt/kafka_2.13-3.8.0 /opt/kafka
+```
+- gói này bao gồm :
+    + Kafka Broker
+    + Kafka Connect, MirrorMaker, tools CLI
+    + Zookeeper scripts (bin/zookeeper-server-start.sh)
+- tạo kafka service systemd
+```
+[Unit]
+Description=Apache Kafka Broker
+After=zookeeper.service
+
+[Service]
+Type=simple
+ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/server.properties
+ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
+```
+- tạo zookeeper.service systemd
+```
+[Unit]
+Description=Apache Zookeeper
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/kafka/bin/zookeeper-server-start.sh /opt/kafka/config/zookeeper.properties
+ExecStop=/opt/kafka/bin/zookeeper-server-stop.sh
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
+```
+- kích hoạt
+```
+systemctl daemon-reload
+systemctl enable zookeeper kafka
+systemctl start zookeeper kafka
+```
+- tạo kafka-connect systemd
+```
+[Unit]
+Description=Kafka Connect Distributed Worker
+After=kafka.service
+
+[Service]
+Type=simple
+Environment="CONNECT_PLUGIN_PATH=/opt/debezium-plugins/debezium-connector-postgres,/opt/debezium-plugins/kafka-connect-jdbc/confluentinc-kafka-connect-jdbc-10.7.4"
+ExecStart=/opt/kafka/bin/connect-distributed.sh /opt/kafka/config/connect-distributed.properties
+Restart=always
+User=root
+WorkingDirectory=/opt/kafka
+
+[Install]
+WantedBy=multi-user.target
+
+```
+- cài debezium plugin
+  + Debezium không phải là 1 service riêng, mà là bộ plugin (connector) chạy bên trong Kafka Connect.
+  + Nó là “cầu nối” giúp Kafka Connect biết cách lấy dữ liệu từ database thông qua CDC (Change Data Capture).
+  + Kafka Connect bản gốc chỉ là framework rỗng. Nếu không có plugin, nó không biết làm việc với PostgreSQL, MySQL, MongoDB, Oracle, ….
+  + Với PostgreSQL → Debezium đọc WAL (Write Ahead Log) qua replication slot.
+  + Với MySQL → Debezium đọc binlog
+  + Chuyển đổi thay đổi (INSERT/UPDATE/DELETE) thành sự kiện JSON/Avro --> Đẩy sự kiện vào Kafka topic.
+```
+mkdir -p /opt/debezium-plugins/debezium-connector-postgres
+cd /opt/debezium-plugins
+tar -xvf /opt/debezium-plugins/debezium-postgres-2.7.4-plugin.tar.gz -C /opt/debezium-plugins/debezium-connector-postgres
+ls -1 /opt/debezium-plugins/debezium-connector-postgres/*.jar | wc -l
+systemctl restart kafka-connect
+```
+- sau khi cài xong debezium plugin sẽ trỏ đường dẫn kafka-connect vào pulgin
+```
+cd /opt/kafka/config
+nano connect-distributed.properties
+-- thêm đường dẫn plugin vừa cài
+plugin.path=/opt/debezium-plugins/debezium-connector-postgres
+```
+- cài confluentinc-kafka-connect-jdbc-10.7.4
+```
+mkdir -p /opt/debezium-plugins/kafka-connect-jdbc
+cd /opt/debezium-plugins/kafka-connect-jdbc
+curl -L -o kafka-connect-jdbc-10.7.4.zip \
+  https://api.hub.confluent.io/api/plugins/confluentinc/kafka-connect-jdbc/versions/10.7.4/confluentinc-kafka-connect-jdbc-10.7.4.zip
+unzip kafka-connect-jdbc-10.7.4.zip -d /opt/debezium-plugins/kafka-connect-jdbc
+-- Tải thêm JDBC driver cho PostgreSQL (bắt buộc)
+wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -P /opt/debezium-plugins/kafka-connect-jdbc
+-- thêm đường dẫn plugin vừa cài
+plugin.path=/opt/debezium-plugins/debezium-connector-postgres,/opt/debezium-plugins/kafka-connect-jdbc/confluentinc-kafka-connect-jdbc-10.7.4
+systemctl restart kafka-connect
+```
+- Kiểm tra plugin đã load chưa
+```
+curl http://localhost:8083/connector-plugins
+```
+- Tạo Source Connector (Debezium Postgres)
+```
+curl -X POST http://localhost:8083/connectors/ \
+-H "Content-Type: application/json" -d '{
+  "name": "source-db1",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "SERVER1_IP",
+    "database.port": "5432",
+    "database.user": "cdc_user",
+    "database.password": "cdc_pass",
+    "database.dbname": "db1",
+    "database.server.name": "db1server",
+    "plugin.name": "pgoutput",
+    "publication.name": "my_publication",
+    "slot.name": "my_slot"
+  }
+}'
+```
+- Tạo Sink Connector (JDBC → DB2)
+```
+curl -X POST http://localhost:8083/connectors/ \
+-H "Content-Type: application/json" -d '{
+  "name": "sink-db2",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "connection.url": "jdbc:postgresql://SERVER3_IP:5432/db2",
+    "connection.user": "db2_user",
+    "connection.password": "db2_pass",
+    "topics": "db1server.public.my_table",
+    "auto.create": "true",
+    "insert.mode": "upsert",
+    "pk.mode": "record_key",
+    "pk.fields": "id"
+  }
+}'
+```
+- Kiểm tra trạng thái connectors
+```
+curl http://localhost:8083/connectors/source-db1/status
+curl http://localhost:8083/connectors/sink-db2/status
+```
+**nếu tất cả cùng running là thành công**
       
