@@ -119,3 +119,45 @@
 - Phải có monitoring tốt (Prometheus, Grafana).
 
 - Học cách tune parameter (retention, buffer, batch size…).
+# Các Bước Deploy CDC kafka Postgres
+## Chuẩn bị Postgres
+- cấu hình postgres master
+```
+-- Bật wal_level = logical trong postgresql.conf
+wal_level = logical
+max_replication_slots = 4
+max_wal_senders = 4
+```
+- tạo user replication
+```
+-- Tạo user replication
+CREATE ROLE cdc_user WITH REPLICATION LOGIN PASSWORD 'cdc_pass';
+
+-- Tạo publication cho bảng
+CREATE PUBLICATION my_publication FOR TABLE my_table;
+```
+#### Cài Kafka và Zookeeper 
+- Zookeeper – “bộ quản lý, điều phối”
+  + Trong hệ sinh thái Kafka, Zookeeper (Apache ZooKeeper) đóng vai trò:
+      + Quản lý cluster metadata: biết có bao nhiêu broker, broker nào đang sống/chết.
+      + Quản lý leader election: khi 1 partition có nhiều replica, ZooKeeper quyết định broker nào là leader.
+      + Lưu trữ thông tin cấu hình: topic, partition, ACL…
+      + Theo dõi health check: broker nào mất kết nối thì cluster sẽ tự động bầu lại leader.
+      + Zookeeper là “trưởng làng”, quản lý thông tin và điều phối để cluster Kafka hoạt động ổn định.
+- Kafka – “máy phát tin nhắn”
+  + Kafka broker là trái tim của hệ thống, nhiệm vụ chính:
+      + Nhận dữ liệu từ producer (ứng dụng, connector, log collector…).
+      + Ghi dữ liệu vào các topic → partition trên đĩa (theo dạng append-only log).
+      + Phân phối dữ liệu cho consumer (các ứng dụng đọc/ETL, microservice, Spark, Flink…).
+      + Đảm bảo tính bền vững và phân tán: dữ liệu được replicate trên nhiều broker.
+      + Xử lý throughput cao: Kafka có thể xử lý hàng trăm nghìn đến hàng triệu messages/giây.
+      + Kafka là “bưu điện tốc độ cao” lưu trữ và phân phối thông điệp.
+- Mối quan hệ Kafka ↔ Zookeeper
+  + Kafka broker không tự quản lý được metadata, leader election.
+  + Kafka dựa vào ZooKeeper để:
+      + Đăng ký khi broker start.
+      + Nhận thông tin cluster.
+      + Biết partition nào mình làm leader/follower.
+      + Zookeeper = quản lý & điều phối
+      + Kafka = lưu trữ & truyền dữ liệu
+      
