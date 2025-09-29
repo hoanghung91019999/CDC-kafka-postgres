@@ -262,6 +262,17 @@ systemctl restart kafka-connect
 ```
 curl http://localhost:8083/connector-plugins
 ```
+- tạo user trên db 2
+```
+sudo -u postgres psql
+CREATE DATABASE db2;
+CREATE USER db2_user WITH PASSWORD 'db2_pass';
+GRANT ALL PRIVILEGES ON DATABASE db2 TO db2_user;
+\c db2
+GRANT ALL PRIVILEGES ON SCHEMA public TO db2_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO db2_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO db2_user;
+```
 - Tạo Source Connector (Debezium Postgres)
 ```
 curl -X POST http://localhost:8083/connectors/ \
