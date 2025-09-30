@@ -120,6 +120,8 @@
 
 - Học cách tune parameter (retention, buffer, batch size…).
 # Các Bước Deploy CDC kafka Postgres
+<img width="948" height="654" alt="image" src="https://github.com/user-attachments/assets/c0a359f4-702e-4219-80a4-11ebb5992119" />
+
 ## Chuẩn bị Postgres
 - cấu hình postgres master
 ```
