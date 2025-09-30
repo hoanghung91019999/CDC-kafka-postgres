@@ -29,6 +29,12 @@
 
     + Có thể đọc theo group (consumer group) để load balancing.
 
+- trong mô hình dưới đây thì :
+    + Debezium = Producer vì nó gửi message dữ liệu vào kafka broker
+    + Kafka Broker cluster = Broker.
+    + Kafka Topic = nơi chứa dữ liệu CDC.
+    + JDBC Sink = Consumer vì nó đọc message từ kafka
+
 ## Luồng dữ liệu Kafka
 - Producer --> [Broker/Topic/Partition] --> Consumer
 
