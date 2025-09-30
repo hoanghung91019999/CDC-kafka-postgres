@@ -326,5 +326,17 @@ curl http://localhost:8083/connectors/sink-db2/status
 **nếu tất cả cùng running là thành công**
 - ngoài ra có thể dùng mirrormaker để replica dữ liệu : 
   + sẽ cần phải deploy 2 kafka ở cả DC và DR, sau đó dùng mirror marker để replica dữ liệu
-  + consumer ...
+- mô hình :
+  + kafka DC 
+  + debezium DC
+  + kafka connect DC
+  + kafka DR
+  + JDBC DR
+  + kafka connect DR
+  + mirrormarker DR
+- Debezium = trung gian giữa DB nguồn → Kafka Source
+- MM2 = trung gian giữa Kafka Source → Kafka DR
+- JDBC Sink = trung gian giữa Kafka DR → DB đích
+- <img width="826" height="554" alt="image" src="https://github.com/user-attachments/assets/ed891df9-3e92-4282-8a63-da0e4f6fa66f" />
+
       
